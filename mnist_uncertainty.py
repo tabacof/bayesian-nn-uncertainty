@@ -189,6 +189,10 @@ if bayesian_approximation == "dropout":
     entropy = lasagne.objectives.categorical_crossentropy(test_prediction, test_prediction)
     test_entropy = theano.function([input_var], entropy)
 
+    test_prediction_classical = lasagne.layers.get_output(network, deterministic=True)
+    entropy_classical = lasagne.objectives.categorical_crossentropy(test_prediction_classical, test_prediction_classical)
+    test_entropy_classical = theano.function([input_var], entropy_classical)
+
 elif bayesian_approximation == "variational":          
     # Input to hidden layer weights
     W1_mu = init(n_in, n_hidden, 'W1_mu') # Weights mean
@@ -212,9 +216,9 @@ elif bayesian_approximation == "variational":
 
     # MLP
     # Hidden layer
-    hidden_output = T.nnet.relu(T.dot(input_var, W1_mu + T.log(1.0+T.exp(W1_sigma))*rv_hidden) + b1)
+    hidden_output = T.nnet.relu(T.batched_dot(input_var, W1_mu + T.log(1.0+T.exp(W1_sigma))*rv_hidden) + b1)
     # Output layer    
-    prediction = T.nnet.softmax(T.dot(hidden_output, W2_mu + T.log(1.0+T.exp(W2_sigma))*rv_output) + b2)
+    prediction = T.nnet.softmax(T.batched_dot(hidden_output, W2_mu + T.log(1.0+T.exp(W2_sigma))*rv_output) + b2)
     # Prediction    
     y_pred = T.argmax(prediction, axis=1)
     
@@ -224,7 +228,7 @@ elif bayesian_approximation == "variational":
     DKL_output = (1.0 + 2.0*W2_sigma - W2_mu**2 - T.exp(2.0*W2_sigma)).sum()/2.0
     
     # Negative log likelihood
-    nll = -T.sum(T.log(T.clip(prediction, 0.000001, 0.999999))[T.arange(target_var.shape[0]), target_var])
+    nll = lasagne.objectives.categorical_crossentropy(T.clip(prediction, 0.000001, 0.999999), target_var)
     # Complete variational loss    
     loss = -(DKL_hidden + DKL_output - nll).mean()
     
@@ -235,14 +239,15 @@ elif bayesian_approximation == "variational":
     # Test functions
     hidden_output_test = T.nnet.relu(T.dot(input_var, W1_mu) + b1)
     test_prediction = T.nnet.softmax(T.dot(hidden_output_test, W2_mu) + b2)
-    test_acc = T.mean(T.eq(T.argmax(T.argmax(test_prediction, axis=1), axis = 0), target_var))
+    test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var))
     test_fn = theano.function([input_var, target_var], [loss, test_prediction, test_acc])
 
     # Probability and entropy
     test_prob = theano.function([input_var], test_prediction)
     entropy = lasagne.objectives.categorical_crossentropy(test_prediction, test_prediction)
     test_entropy = theano.function([input_var], entropy)
-
+    test_entropy_classical = test_entropy # Fake classical entropy
+    
 # Finally, launch the training loop.
 print("Starting training...")
 # We iterate over epochs:
@@ -278,50 +283,74 @@ print("  test accuracy:\t\t{:.2f} %".format(test_acc / test_batches * 100))
 # Uncertainty prediction
 test_pred_mean = {str(x):[] for x in range(0,10)}
 test_pred_std = {str(x):[] for x in range(0,10)}
-test_entropy_mean = {str(x):[] for x in range(0,10)}
+test_entropy_bayesian = {str(x):[] for x in range(0,10)}
+test_entropy_deterministic = {str(x):[] for x in range(0,10)}
+
 print("Total test samples", len(X_test_all))
 for i in range(len(X_test_all)):
     probs = test_prob(np.tile(X_test_all[i], posterior_samples).reshape(-1, n_in))
     entropy = test_entropy(np.tile(X_test_all[i], posterior_samples).reshape(-1, n_in))
+    classical_entropy = test_entropy_classical(np.tile(X_test_all[i], posterior_samples).reshape(-1, n_in))
     predictive_mean = np.mean(probs, axis=0)
     predictive_std = np.std(probs, axis=0)
     test_pred_mean[str(y_test_all[i])].append(predictive_mean[1])
     test_pred_std[str(y_test_all[i])].append(predictive_std[1])
-    test_entropy_mean[str(y_test_all[i])].append(entropy.mean())
+    test_entropy_bayesian[str(y_test_all[i])].append(entropy.mean())
+    test_entropy_deterministic[str(y_test_all[i])].append(classical_entropy.mean())
 
 # Plotting
 for k in sorted(test_pred_mean.keys()):
     sns.plt.figure()
     sns.plt.hist(test_pred_mean[k], label = "Prediction mean for " + k)
-    sns.plt.hist(test_entropy_mean[k], label = "Entropy for " + k)
+    sns.plt.hist(test_entropy_bayesian[k], label = "Entropy for " + k)
     sns.plt.hist(test_pred_std[k], label = "Prediction std for " + k)
+    #sns.plt.hist(test_entropy_deterministic[k], label = "Classical entropy for " + k)
     sns.plt.legend()
     sns.plt.show()
 
 # Anomaly detection
-# by prediction entropy
-entropy_threshold = np.linspace(0, 0.5, 1000)
-entropy_acc = {}
-for t in entropy_threshold:
+# by classical prediction entropy
+threshold = np.linspace(0, 0.5, 1000)
+acc = {}
+for t in threshold:
     in_acc = 0.0
     out_acc = 0.0
-    for l in test_entropy_mean:
+    for l in test_entropy_deterministic:
         if l == '0' or l == '1':
-            in_acc += (np.array(test_entropy_mean[l]) < t).mean()
+            in_acc += (np.array(test_entropy_deterministic[l]) < t).mean()
         else:
-            out_acc += (np.array(test_entropy_mean[l]) >= t).mean()
+            out_acc += (np.array(test_entropy_deterministic[l]) >= t).mean()
     in_acc /= 2.0
     out_acc /= 8.0
     bal_acc = (in_acc + out_acc)/2.0
-    entropy_acc[bal_acc] = t
+    acc[bal_acc] = t
     
-best_acc = sorted(entropy_acc, reverse=True)[0]
-print("Entropy accuracy", best_acc, "Entropy threshold", entropy_acc[best_acc], )
+best_acc = sorted(acc, reverse=True)[0]
+print("Classical entropy accuracy", best_acc, "entropy threshold", acc[best_acc], )
+  
+# by Bayesian prediction entropy
+threshold = np.linspace(0, 0.5, 1000)
+acc = {}
+for t in threshold:
+    in_acc = 0.0
+    out_acc = 0.0
+    for l in test_entropy_bayesian:
+        if l == '0' or l == '1':
+            in_acc += (np.array(test_entropy_bayesian[l]) < t).mean()
+        else:
+            out_acc += (np.array(test_entropy_bayesian[l]) >= t).mean()
+    in_acc /= 2.0
+    out_acc /= 8.0
+    bal_acc = (in_acc + out_acc)/2.0
+    acc[bal_acc] = t
     
+best_acc = sorted(acc, reverse=True)[0]
+print("Bayesian entropy accuracy", best_acc, "entropy threshold", acc[best_acc], )
+  
 # by prediction standard devition
-std_threshold = np.linspace(0, 0.5, 1000)
-std_acc = {}
-for t in std_threshold:
+threshold = np.linspace(0, 0.5, 1000)
+acc = {}
+for t in threshold:
     in_acc = 0.0
     out_acc = 0.0
     for l in test_pred_std:
@@ -332,8 +361,8 @@ for t in std_threshold:
     in_acc /= 2.0
     out_acc /= 8.0
     bal_acc = (in_acc + out_acc)/2.0
-    std_acc[bal_acc] = t
+    acc[bal_acc] = t
     
-best_acc = sorted(std_acc, reverse=True)[0]
-print("Std accuracy", best_acc, "Std threshold", std_acc[best_acc])
+best_acc = sorted(acc, reverse=True)[0]
+print("Bayesian std accuracy", best_acc, "std threshold", acc[best_acc])
         
