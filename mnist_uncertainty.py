@@ -18,6 +18,7 @@ import time
 import operator
 
 import numpy as np
+import scipy.stats
 import seaborn as sns
 
 import theano
@@ -287,7 +288,8 @@ print("  test accuracy:\t\t{:.2f} %".format(test_acc / test_batches * 100))
 # Uncertainty prediction
 test_pred_mean = {str(x):[] for x in range(0,10)}
 test_pred_std = {str(x):[] for x in range(0,10)}
-test_entropy_bayesian = {str(x):[] for x in range(0,10)}
+test_entropy_bayesian_v1 = {str(x):[] for x in range(0,10)}
+test_entropy_bayesian_v2 = {str(x):[] for x in range(0,10)}
 test_entropy_deterministic = {str(x):[] for x in range(0,10)}
 
 print("Total test samples", len(X_test_all))
@@ -299,14 +301,16 @@ for i in range(len(X_test_all)):
     predictive_std = np.std(probs, axis=0)
     test_pred_mean[str(y_test_all[i])].append(predictive_mean[1])
     test_pred_std[str(y_test_all[i])].append(predictive_std[1])
-    test_entropy_bayesian[str(y_test_all[i])].append(entropy.mean())
+    test_entropy_bayesian_v1[str(y_test_all[i])].append(entropy.mean())
+    test_entropy_bayesian_v2[str(y_test_all[i])].append(scipy.stats.entropy(predictive_mean))
     test_entropy_deterministic[str(y_test_all[i])].append(classical_entropy.mean())
 
 # Plotting
 for k in sorted(test_pred_mean.keys()):
     sns.plt.figure()
     sns.plt.hist(test_pred_mean[k], label = "Prediction mean for " + k)
-    sns.plt.hist(test_entropy_bayesian[k], label = "Entropy for " + k)
+    sns.plt.hist(test_entropy_bayesian_v1[k], label = "Bayesian Entropy v1 for " + k)
+    sns.plt.hist(test_entropy_bayesian_v2[k], label = "Bayesian Entropy v2 for " + k)    
     sns.plt.hist(test_pred_std[k], label = "Prediction std for " + k)
     #sns.plt.hist(test_entropy_deterministic[k], label = "Classical entropy for " + k)
     sns.plt.legend()
@@ -314,60 +318,31 @@ for k in sorted(test_pred_mean.keys()):
 
 # Anomaly detection
 # by classical prediction entropy
-threshold = np.linspace(0, 1.0, 1000)
-acc = {}
-for t in threshold:
-    in_acc = 0.0
-    out_acc = 0.0
-    for l in test_entropy_deterministic:
-        if l == '0' or l == '1':
-            in_acc += (np.array(test_entropy_deterministic[l]) < t).mean()
-        else:
-            out_acc += (np.array(test_entropy_deterministic[l]) >= t).mean()
-    in_acc /= 2.0
-    out_acc /= 8.0
-    bal_acc = (in_acc + out_acc)/2.0
-    acc[t] = bal_acc
-    
-sorted_acc = sorted(acc.items(), key=operator.itemgetter(1), reverse = True)
-print("Classical entropy accuracy", sorted_acc[0][1], "entropy threshold", sorted_acc[0][0])
-  
-# by Bayesian prediction entropy
-threshold = np.linspace(0, 1.0, 1000)
-acc = {}
-for t in threshold:
-    in_acc = 0.0
-    out_acc = 0.0
-    for l in test_entropy_bayesian:
-        if l == '0' or l == '1':
-            in_acc += (np.array(test_entropy_bayesian[l]) < t).mean()
-        else:
-            out_acc += (np.array(test_entropy_bayesian[l]) >= t).mean()
-    in_acc /= 2.0
-    out_acc /= 8.0
-    bal_acc = (in_acc + out_acc)/2.0
-    acc[t] = bal_acc
-    
-sorted_acc = sorted(acc.items(), key=operator.itemgetter(1), reverse = True)
-print("Bayesian entropy accuracy", sorted_acc[0][1], "entropy threshold",sorted_acc[0][0])
-  
-# by prediction standard devition
-threshold = np.linspace(0, 1.0, 1000)
-acc = {}
-for t in threshold:
-    in_acc = 0.0
-    out_acc = 0.0
-    for l in test_pred_std:
-        if l == '0' or l == '1':
-            in_acc += (np.array(test_pred_std[l]) < t).mean()
-        else:
-            out_acc += (np.array(test_pred_std[l]) >= t).mean()
-    in_acc /= 2.0
-    out_acc /= 8.0
-    bal_acc = (in_acc + out_acc)/2.0
-    acc[t] = bal_acc
-    
-sorted_acc = sorted(acc.items(), key=operator.itemgetter(1), reverse = True)
-best_acc = sorted_acc[0]
-print("Bayesian std accuracy", sorted_acc[0][1], "std threshold", sorted_acc[0][0])
+def anomaly_detection(anomaly_score_dict, name):
+    threshold = np.linspace(0, 1.0, 1000)
+    acc = {}
+    for t in threshold:
+        tp = 0.0
+        tn = 0.0
+        for l in anomaly_score_dict:
+            if l == '0' or l == '1':
+                tp += (np.array(anomaly_score_dict[l]) < t).mean()
+            else:
+                tn += (np.array(anomaly_score_dict[l]) >= t).mean()
+        tp /= 2.0
+        tn /= 8.0
+        bal_acc = (tp + tn)/2.0
+        f1_score = 2.0*tp/(2.0 + tp - tn)
+        acc[t] = [bal_acc, f1_score, tp, tn]
         
+    print("{}\tscore\tthreshold\tTP\tTN".format(name))
+    sorted_acc = sorted(acc.items(), key= lambda x : x[1][0], reverse = True)
+    print("\tbalanced acc\t{:.3f}\t{:.3f}\t\t{:.3f}\t{:.3f}".format(sorted_acc[0][1][0], sorted_acc[0][0], sorted_acc[0][1][2], sorted_acc[0][1][3]))
+    sorted_acc = sorted(acc.items(), key= lambda x : x[1][1], reverse = True)
+    print("\tf1 score\t{:.3f}\t{:.3f}\t\t{:.3f}\t{:.3f}".format(sorted_acc[0][1][1], sorted_acc[0][0], sorted_acc[0][1][2], sorted_acc[0][1][3]))
+
+anomaly_detection(test_entropy_deterministic, "Classical entropy")
+anomaly_detection(test_entropy_bayesian_v1, "Bayesian entropy v1")
+anomaly_detection(test_entropy_bayesian_v2, "Bayesian entropy v2")
+anomaly_detection(test_entropy_deterministic, "Classical entropy")
+anomaly_detection(test_pred_std, "Bayesian prediction STD")
