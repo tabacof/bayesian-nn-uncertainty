@@ -24,15 +24,15 @@ import training
 
 # Experiment parameters
 
-#dataset = "mnist"
-dataset = "cifar"
+dataset = "mnist"
+#dataset = "cifar"
 
 num_epochs = 150 # Number of epochs
 batch_size = 100 # Mini batch size (also used for number of posterior samples)
 weight_decay = 1e-4 # L2 regularization
 dropout_p = 0.5 # Dropout probability
 n_hidden = 512 # Number of neurons at hidden layer
-inside_labels = [0, 1, 2, 3, 4, 5, 6, 7, 8] # Labels to be trained
+inside_labels = [0, 1, 2, 3, 4] # Labels to be trained
 
 # Bayesian approximation method
 bayesian_approximation  = "dropout" # Use Gal's variational dropout method
@@ -64,32 +64,36 @@ training.train(model, X_train, y_train, batch_size, num_epochs)
 training.test(model, X_test, y_test, batch_size)
 
 # Uncertainty prediction
-test_pred_mean = {x:[] for x in range(0,10)}
-test_pred_std = {x:[] for x in range(0,10)}
-test_entropy_bayesian_v1 = {x:[] for x in range(0,10)}
-test_entropy_bayesian_v2 = {x:[] for x in range(0,10)}
-test_entropy_deterministic = {x:[] for x in range(0,10)}
+test_pred_mean = {x:[] for x in range(10)}
+test_pred_std = {x:[] for x in range(10)}
+test_entropy_bayesian_v1 = {x:[] for x in range(10)}
+test_entropy_bayesian_v2 = {x:[] for x in range(10)}
+test_entropy_deterministic = {x:[] for x in range(10)}
+test_variation_ratio = {x:[] for x in range(10)}
 
-print("Total test samples", len(X_test_all))
 for i in range(len(X_test_all)):
     probs = model.probabilities(np.tile(X_test_all[i], batch_size).reshape(-1, n_in))
     bayesian_entropy = model.entropy_bayesian(np.tile(X_test_all[i], batch_size).reshape(-1, n_in))
     classical_entropy = model.entropy_deterministic(X_test_all[i][np.newaxis,:])
     predictive_mean = np.mean(probs, axis=0)
     predictive_std = np.std(probs, axis=0)
-    test_pred_mean[y_test_all[i]].append(predictive_mean[0])
-    test_pred_std[y_test_all[i]].append(predictive_std[0])
+    _, count = scipy.stats.mode(np.argmax(probs, axis = 1))
+    variation_ration = 1.0 - count[0]/float(len(probs))
+    test_pred_mean[y_test_all[i]].append(predictive_mean[1])
+    test_pred_std[y_test_all[i]].append(predictive_std.mean())
     test_entropy_bayesian_v1[y_test_all[i]].append(bayesian_entropy.mean())
     test_entropy_bayesian_v2[y_test_all[i]].append(scipy.stats.entropy(predictive_mean))
     test_entropy_deterministic[y_test_all[i]].append(classical_entropy.mean())
+    test_variation_ratio[y_test_all[i]].append(variation_ration)
 
 # Plotting
 for k in sorted(test_pred_mean.keys()):
     sns.plt.figure()
-    sns.plt.hist(test_pred_mean[k], label = "Prediction mean for " + str(k))
+    #sns.plt.hist(test_pred_mean[k], label = "Prediction mean for " + str(k))
     sns.plt.hist(test_entropy_bayesian_v1[k], label = "Bayesian Entropy v1 for " + str(k))
-    sns.plt.hist(test_entropy_bayesian_v2[k], label = "Bayesian Entropy v2 for " + str(k))    
+    #sns.plt.hist(test_entropy_bayesian_v2[k], label = "Bayesian Entropy v2 for " + str(k))    
     sns.plt.hist(test_pred_std[k], label = "Prediction std for " + str(k))
+    sns.plt.hist(test_variation_ratio[k], label = "Variation ratio for " + str(k))
     #sns.plt.hist(test_entropy_deterministic[k], label = "Classical entropy for " + str(k))
     sns.plt.legend()
     sns.plt.show()
@@ -97,7 +101,7 @@ for k in sorted(test_pred_mean.keys()):
 # Anomaly detection
 # by classical prediction entropy
 def anomaly_detection(anomaly_score_dict, name):
-    threshold = np.linspace(0, 1.0, 1000)
+    threshold = np.linspace(0, 1.0, 10000)
     acc = {}
     for t in threshold:
         tp = 0.0
@@ -123,3 +127,4 @@ anomaly_detection(test_entropy_bayesian_v1, "Bayesian entropy v1")
 anomaly_detection(test_entropy_bayesian_v2, "Bayesian entropy v2")
 anomaly_detection(test_entropy_deterministic, "Classical entropy")
 anomaly_detection(test_pred_std, "Bayesian prediction STD")
+anomaly_detection(test_variation_ratio, "Variation ratio     ")
