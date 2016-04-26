@@ -27,7 +27,7 @@ import training
 dataset = "mnist"
 #dataset = "cifar"
 
-num_epochs = 150 # Number of epochs
+num_epochs = 25 # Number of epochs
 batch_size = 100 # Mini batch size (also used for number of posterior samples)
 weight_decay = 1e-4 # L2 regularization
 dropout_p = 0.5 # Dropout probability
@@ -35,8 +35,8 @@ n_hidden = 512 # Number of neurons at hidden layer
 inside_labels = [0, 1, 2, 3, 4] # Labels to be trained
 
 # Bayesian approximation method
-bayesian_approximation  = "dropout" # Use Gal's variational dropout method
-#bayesian_approximation  = "variational" # Use Gaussian variational approximation
+#bayesian_approximation  = "dropout" # Use Gal's variational dropout method
+bayesian_approximation  = "variational" # Use Gaussian variational approximation
 
 n_out = len(inside_labels)
 
