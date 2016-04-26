@@ -31,12 +31,13 @@ num_epochs = 150 # Number of epochs
 batch_size = 100 # Mini batch size (also used for number of posterior samples)
 weight_decay = 1e-4 # L2 regularization
 dropout_p = 0.5 # Dropout probability
-n_hidden = 512 # Number of neurons at hidden layer
-inside_labels = [0, 1, 2, 3, 4] # Labels to be trained
+#inside_labels = [0, 2, 4, 6, 8] # Labels to be trained
+inside_labels = range(10)
+layers = [50, 512, 256] # Fully-connected layers (neurons per layer)
 
 # Bayesian approximation method
-bayesian_approximation  = "dropout" # Use Gal's variational dropout method
-#bayesian_approximation  = "variational" # Use Gaussian variational approximation
+#bayesian_approximation  = "dropout" # Use Gal's variational dropout method
+bayesian_approximation  = "variational" # Use Gaussian variational approximation
 
 n_out = len(inside_labels)
 
@@ -44,22 +45,22 @@ n_out = len(inside_labels)
 print("Loading data...")
 if dataset == "mnist":
     n_in = 28*28
-    X_train, y_train, X_test, y_test, X_test_all, y_test_all = datasets.load_MNIST(inside_labels)
+    X_train, y_train, X_val, y_val, X_test, y_test, X_test_all, y_test_all = datasets.load_MNIST(inside_labels)
 elif dataset == "cifar":
     n_in = 32*32*3
-    X_train, y_train, X_test, y_test, X_test_all, y_test_all = datasets.load_CIFAR10(inside_labels)
+    X_train, y_train, X_val, y_val, X_test, y_test, X_test_all, y_test_all = datasets.load_CIFAR10(inside_labels)
 
 # Prepare Theano variables for inputs and targets
 input_var = T.matrix('inputs')
 target_var = T.ivector('targets')
 
 if bayesian_approximation == "dropout":
-    model = models.mlp_dropout(input_var, target_var, n_in, n_hidden, n_out, dropout_p, weight_decay)
+    model = models.mlp_dropout(input_var, target_var, n_in, n_out, layers, dropout_p, weight_decay)
 elif bayesian_approximation == "variational":
-    model = models.mlp_variational(input_var, target_var, n_in, n_hidden, n_out, batch_size)
+    model = models.mlp_variational(input_var, target_var, n_in, n_out, layers, batch_size, len(X_train)/float(batch_size))
     
 # Mini-batch training with SGD
-training.train(model, X_train, y_train, batch_size, num_epochs)
+training.train(model, X_train, y_train, X_val, y_val, batch_size, num_epochs)
 # Mini-batch testing
 training.test(model, X_test, y_test, batch_size)
 

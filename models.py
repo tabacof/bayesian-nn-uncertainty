@@ -22,21 +22,22 @@ import theano.tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams
 
 import lasagne
+import training
 
 class mlp_dropout:
-    def __init__(self, input_var, target_var, n_in, n_hidden, n_out, dropout_p = 0.5, weight_decay = 0.0):
-        l_in = lasagne.layers.InputLayer(shape=(None, n_in),
+    def __init__(self, input_var, target_var, n_in, n_out, layers, dropout_p = 0.5, weight_decay = 0.0):
+        network = lasagne.layers.InputLayer(shape=(None, n_in),
                                          input_var=input_var)
-    
-        l_hid1 = lasagne.layers.DenseLayer(
-                l_in, num_units=n_hidden,
-                nonlinearity=lasagne.nonlinearities.rectify,
-                W=lasagne.init.GlorotUniform())
-    
-        l_hid1_drop = lasagne.layers.DropoutLayer(l_hid1, p=dropout_p)
-    
+        for l in layers:
+            network = lasagne.layers.DenseLayer(
+                    network, num_units=l,
+                    nonlinearity=lasagne.nonlinearities.rectify,
+                    W=lasagne.init.GlorotUniform())
+        
+            network = lasagne.layers.DropoutLayer(network, p=dropout_p)
+        
         network = lasagne.layers.DenseLayer(
-                l_hid1_drop, num_units=n_out,
+                network, num_units=n_out,
                 nonlinearity=lasagne.nonlinearities.softmax)
     
         # Softmax output
@@ -52,7 +53,7 @@ class mlp_dropout:
         params = lasagne.layers.get_all_params(network, trainable=True)
         updates = lasagne.updates.momentum(loss, params, learning_rate=0.01, momentum=0.9)
         self.train = theano.function([input_var, target_var], loss, updates=updates)
-    
+
         # Test functions
         test_loss = lasagne.objectives.categorical_crossentropy(prediction, target_var).mean()
         test_acc = T.mean(T.eq(T.argmax(prediction, axis=1), target_var), dtype=theano.config.floatX)
@@ -79,7 +80,8 @@ def weight_init(n_in, n_out, name):
     
 
 class mlp_variational:
-    def __init__(self, input_var, target_var, n_in, n_hidden, n_out, batch_size):
+    def __init__(self, input_var, target_var, n_in, n_out, layers, batch_size, n_batches):
+        n_hidden = layers[0]        
         # Input to hidden layer weights
         W1_mu = weight_init(n_in, n_hidden, 'W1_mu') # Weights mean
         W1_log_var = weight_init(n_in, n_hidden, 'W1_log_var') # Weights log variance
@@ -119,17 +121,17 @@ class mlp_variational:
         # Negative log likelihood
         nll = T.nnet.categorical_crossentropy(T.clip(prediction, 0.000001, 0.999999), target_var)
         # Complete variational loss    
-        loss = nll.mean() - (DKL_hidden + DKL_output)/float(batch_size)
+        loss = nll.mean() - (DKL_hidden + DKL_output)/float(n_batches)
         #loss = nll.mean()
         # SGD training
-        updates = sgd(loss, params, 0.01)
+        updates = training.sgd(loss, params, 0.01)
         self.train = theano.function([input_var, target_var], loss, updates=updates)
         
         # Test functions
         hidden_output_test = T.nnet.relu(T.dot(input_var, W1_mu) + b1)
         test_prediction = T.nnet.softmax(T.dot(hidden_output_test, W2_mu) + b2)
         test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var))
-        self.test = theano.function([input_var, target_var], [loss, test_prediction, test_acc])
+        self.test = theano.function([input_var, target_var], [loss, test_acc])
     
         # Probability and entropy
         self.probabilities = theano.function([input_var], prediction)
