@@ -44,10 +44,10 @@ def sgd(cost, params, lr=0.05, momentum = 0.9):
         updates.append([acc, acc_new])
         updates.append([p, p - acc_new * lr])
     return updates
-    
-    
-def train(model, X_train, y_train, batch_size, num_epochs):
-    print("Starting training...")
+       
+def train(model, X_train, y_train, X_val, y_val, batch_size, num_epochs, verbose = True):
+    if verbose:
+        print("Starting training...")
     # We iterate over epochs:
     for epoch in range(num_epochs):
         # In each epoch, we do a full pass over the training data:
@@ -59,11 +59,27 @@ def train(model, X_train, y_train, batch_size, num_epochs):
             err = model.train(inputs, targets)
             train_err += err
             train_batches += 1
-    
-        # Then we print the results for this epoch:
-        print("Epoch {} of {} took {:.3f}s".format(epoch + 1, num_epochs, time.time() - start_time))
-        print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
 
+        # And a full pass over the validation data:
+        val_err = 0
+        val_acc = 0
+        val_batches = 0
+        for batch in iterate_minibatches(X_val, y_val, batch_size, shuffle=False):
+            inputs, targets = batch
+            err, acc = model.test(inputs, targets)
+            val_err += err
+            val_acc += acc
+            val_batches += 1
+
+        if verbose:
+            # Then we print the results for this epoch:
+            print("Epoch {} of {} took {:.3f}s".format(
+                epoch + 1, num_epochs, time.time() - start_time))
+            print("  training loss:\t\t{:.6f}".format(train_err / train_batches))
+            print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
+            print("  validation accuracy:\t\t{:.2f} %".format(
+                val_acc / val_batches * 100))
+                
 def test(model, X_test, y_test, batch_size):
     # After training, we compute and print the test error:
     test_err = 0

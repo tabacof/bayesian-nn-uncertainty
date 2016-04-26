@@ -16,6 +16,7 @@ from __future__ import print_function
 
 import sys
 import os
+import math
 import numpy as np
 import gzip
 import tarfile
@@ -83,7 +84,11 @@ def load_MNIST(inside_labels):
         y_train[y_train == label] = count
         y_test[y_test == label] = count
 
-    return X_train, y_train, X_test, y_test,  X_test_all, y_test_all
+    val_threshold = math.trunc(0.1 * len(X_train))
+    X_train, X_val = X_train[:-val_threshold], X_train[-val_threshold:]
+    y_train, y_val = y_train[:-val_threshold], y_train[-val_threshold:]
+    
+    return X_train, y_train, X_val, y_val, X_test, y_test,  X_test_all, y_test_all
 
 def unpickle(file):
     import cPickle
@@ -95,7 +100,7 @@ def unpickle(file):
 def load_CIFAR10(inside_labels):
     filename = 'cifar-10-python.tar.gz'
     if not os.path.exists(filename):
-        download('https://www.cs.toronto.edu/~kriz/', filename)
+        download(filename, 'https://www.cs.toronto.edu/~kriz/')
     
     tar = tarfile.open(filename, "r:gz")
     tar.extractall()
@@ -156,5 +161,9 @@ def load_CIFAR10(inside_labels):
         y_train[y_train == label] = count
         y_test[y_test == label] = count
         
-    return X_train, y_train, X_test, y_test,  X_test_all, y_test_all
+    val_threshold = math.trunc(0.1 * len(X_train))
+    X_train, X_val = X_train[:-val_threshold], X_train[-val_threshold:]
+    y_train, y_val = y_train[:-val_threshold], y_train[-val_threshold:]
+    
+    return X_train, y_train, X_val, y_val, X_test, y_test,  X_test_all, y_test_all
 
