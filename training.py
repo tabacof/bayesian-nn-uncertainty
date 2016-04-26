@@ -44,7 +44,19 @@ def sgd(cost, params, lr=0.05, momentum = 0.9):
         updates.append([acc, acc_new])
         updates.append([p, p - acc_new * lr])
     return updates
-       
+      
+def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6):
+    grads = T.grad(cost=cost, wrt=params)
+    updates = []
+    for p, g in zip(params, grads):
+        acc = theano.shared(p.get_value() * 0.)
+        acc_new = rho * acc + (1 - rho) * g ** 2
+        gradient_scaling = T.sqrt(acc_new + epsilon)
+        g = g / gradient_scaling
+        updates.append((acc, acc_new))
+        updates.append((p, p - lr * g))
+    return updates
+
 def train(model, X_train, y_train, X_val, y_val, batch_size, num_epochs, verbose = True):
     if verbose:
         print("Starting training...")

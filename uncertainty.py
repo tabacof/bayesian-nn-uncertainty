@@ -32,7 +32,7 @@ batch_size = 100 # Mini batch size (also used for number of posterior samples)
 weight_decay = 1e-4 # L2 regularization
 dropout_p = 0.5 # Dropout probability
 #inside_labels = [0, 2, 4, 6, 8] # Labels to be trained
-inside_labels = range(10)
+inside_labels = [0, 1, 2, 3]
 layers = [50, 512, 256] # Fully-connected layers (neurons per layer)
 
 # Bayesian approximation method

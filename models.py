@@ -124,15 +124,15 @@ class mlp_variational:
         loss = nll.mean() - (DKL_hidden + DKL_output)/float(n_batches)
         #loss = nll.mean()
         # SGD training
-        updates = training.sgd(loss, params, 0.01)
+        updates = training.RMSprop(loss, params)
         self.train = theano.function([input_var, target_var], loss, updates=updates)
         
         # Test functions
         hidden_output_test = T.nnet.relu(T.dot(input_var, W1_mu) + b1)
         test_prediction = T.nnet.softmax(T.dot(hidden_output_test, W2_mu) + b2)
-        test_acc = T.mean(T.eq(T.argmax(prediction, axis=1), target_var))
+        test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var))
         self.test = theano.function([input_var, target_var], [loss, test_acc])
-        self.pred =  theano.function([input_var], prediction)
+        self.pred =  theano.function([input_var], test_prediction)
 
         # Probability and entropy
         self.probabilities = theano.function([input_var], prediction)
