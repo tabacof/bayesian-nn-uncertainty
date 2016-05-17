@@ -84,18 +84,18 @@ class mlp_variational:
         n_hidden = layers[0]        
         # Input to hidden layer weights
         W1_mu = weight_init(n_in, n_hidden, 'W1_mu') # Weights mean
-        W1_log_var = weight_init(n_in, n_hidden, 'W1_log_var') # Weights log variance
+        W1_log_sigma = weight_init(n_in, n_hidden, 'W1_log_sigma') # Weights log variance
         
         # Hidden layer to output weights
         W2_mu = weight_init(n_hidden, n_out, 'W2_mu') # Weights mean
-        W2_log_var = weight_init(n_hidden, n_out, 'W2_log_var') # Weights log variance
+        W2_log_sigma = weight_init(n_hidden, n_out, 'W2_log_sigma') # Weights log variance
         
         # Biases are not random variables (for convenience)
         b1 = theano.shared(value=np.zeros((n_hidden,), dtype=theano.config.floatX), name='b1', borrow=True)
         b2 = theano.shared(value=np.zeros((n_out,),dtype=theano.config.floatX), name='b2', borrow=True)
          
         # Network parameters
-        params = [W1_mu, W1_log_var, W2_mu, W2_log_var, b1, b2]
+        params = [W1_mu, W1_log_sigma, W2_mu, W2_log_sigma, b1, b2]
         
         # Random variables
         srng = MRG_RandomStreams(seed=234)
@@ -104,19 +104,19 @@ class mlp_variational:
     
         # MLP
         # Hidden layer
-        #hidden_output = T.nnet.relu(T.batched_dot(input_var, W1_mu + T.log(1.0+T.exp(W1_log_var))*rv_hidden) + b1)
-        hidden_output = T.nnet.relu(T.batched_dot(input_var, W1_mu + T.exp(W1_log_var)*rv_hidden) + b1)
+        #hidden_output = T.nnet.relu(T.batched_dot(input_var, W1_mu + T.log(1.0+T.exp(W1_log_sigma))*rv_hidden) + b1)
+        hidden_output = T.nnet.relu(T.batched_dot(input_var, W1_mu + T.exp(W1_log_sigma)*rv_hidden) + b1)
     
         # Output layer    
-        #prediction = T.nnet.softmax(T.batched_dot(hidden_output, W2_mu + T.log(1.0+T.exp(W2_log_var))*rv_output) + b2)
-        prediction = T.nnet.softmax(T.batched_dot(hidden_output, W2_mu + T.exp(W2_log_var)*rv_output) + b2)
+        #prediction = T.nnet.softmax(T.batched_dot(hidden_output, W2_mu + T.log(1.0+T.exp(W2_log_sigma))*rv_output) + b2)
+        prediction = T.nnet.softmax(T.batched_dot(hidden_output, W2_mu + T.exp(W2_log_sigma)*rv_output) + b2)
         
         # KL divergence between prior and posterior
         # For Gaussian prior and posterior, the formula is exact:
-        #DKL_hidden = (1.0 + T.log(2.0*T.log(1.0+T.exp(W1_log_var))) - W1_mu**2.0 - 2.0*T.log(1.0+T.exp(W1_log_var))).sum()/2.0
-        #DKL_output = (1.0 + T.log(2.0*T.log(1.0+T.exp(W2_log_var))) - W2_mu**2.0 - 2.0*T.log(1.0+T.exp(W2_log_var))).sum()/2.0
-        DKL_hidden = (1.0 + 2.0*W1_log_var - W1_mu**2.0 - T.exp(2.0*W1_log_var)).sum()/2.0
-        DKL_output = (1.0 + 2.0*W2_log_var - W2_mu**2.0 - T.exp(2.0*W2_log_var)).sum()/2.0
+        #DKL_hidden = (1.0 + T.log(2.0*T.log(1.0+T.exp(W1_log_sigma))) - W1_mu**2.0 - 2.0*T.log(1.0+T.exp(W1_log_sigma))).sum()/2.0
+        #DKL_output = (1.0 + T.log(2.0*T.log(1.0+T.exp(W2_log_sigma))) - W2_mu**2.0 - 2.0*T.log(1.0+T.exp(W2_log_sigma))).sum()/2.0
+        DKL_hidden = (1.0 + 2.0*W1_log_sigma - W1_mu**2.0 - T.exp(2.0*W1_log_sigma)).sum()/2.0
+        DKL_output = (1.0 + 2.0*W2_log_sigma - W2_mu**2.0 - T.exp(2.0*W2_log_sigma)).sum()/2.0
         
         # Negative log likelihood
         nll = T.nnet.categorical_crossentropy(prediction, target_var)
