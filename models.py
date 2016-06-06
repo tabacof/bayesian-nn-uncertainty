@@ -22,12 +22,10 @@ import theano.tensor as T
 from theano.sandbox.rng_mrg import MRG_RandomStreams
 
 import lasagne
-import training
 
 class mlp_dropout:
     def __init__(self, input_var, target_var, n_in, n_out, layers, dropout_p = 0.5, weight_decay = 0.0):
-        network = lasagne.layers.InputLayer(shape=(None, n_in),
-                                         input_var=input_var)
+        network = lasagne.layers.InputLayer(shape=[None]+ n_in, input_var=input_var)
         for l in layers:
             network = lasagne.layers.DenseLayer(
                     network, num_units=l,
@@ -49,9 +47,9 @@ class mlp_dropout:
         weightsl2 = lasagne.regularization.regularize_network_params(network, lasagne.regularization.l2)
         loss += weight_decay*weightsl2
         
-        # SGD training
+        # ADAM training
         params = lasagne.layers.get_all_params(network, trainable=True)
-        updates = lasagne.updates.momentum(loss, params, learning_rate=0.01, momentum=0.9)
+        updates = lasagne.updates.adam(loss, params)
         self.train = theano.function([input_var, target_var], loss, updates=updates)
 
         # Test functions
@@ -67,7 +65,56 @@ class mlp_dropout:
         test_prediction_classical = lasagne.layers.get_output(network, deterministic=True)
         entropy_classical = lasagne.objectives.categorical_crossentropy(test_prediction_classical, test_prediction_classical)
         self.entropy_deterministic = theano.function([input_var], entropy_classical)
-               
+             
+class convnet_dropout:
+    def __init__(self, input_var, target_var, n_in, n_out, dropout_p = 0.5, weight_decay = 0.0):
+        network = lasagne.layers.InputLayer(shape=[None] + n_in,
+                                         input_var=input_var)
+        # Convolution + pooling + dropout
+        network = lasagne.layers.Conv2DLayer(network, num_filters=192, filter_size=5, nonlinearity=lasagne.nonlinearities.elu)
+        network = lasagne.layers.DropoutLayer(network,  p=dropout_p)
+        network = lasagne.layers.Pool2DLayer(network, pool_size=2)
+        
+        network = lasagne.layers.Conv2DLayer(network, num_filters=192, filter_size=5, nonlinearity=lasagne.nonlinearities.elu)
+        network = lasagne.layers.DropoutLayer(network,  p=dropout_p)
+        network = lasagne.layers.Pool2DLayer(network, pool_size=2)
+        
+        # Fully-connected + dropout
+        network = lasagne.layers.DenseLayer(network, num_units=1000, nonlinearity=lasagne.nonlinearities.elu)
+        network = lasagne.layers.DropoutLayer(network,  p=dropout_p)
+
+        network = lasagne.layers.DenseLayer(
+                network, num_units=n_out,
+                nonlinearity=lasagne.nonlinearities.softmax)
+    
+        # Softmax output
+        prediction = lasagne.layers.get_output(network, deterministic=False)
+        loss = lasagne.objectives.categorical_crossentropy(prediction, target_var)
+        loss = loss.mean()
+        
+        # L2 regularization (weight decay)
+        weightsl2 = lasagne.regularization.regularize_network_params(network, lasagne.regularization.l2)
+        loss += weight_decay*weightsl2
+        
+        # ADAM training
+        params = lasagne.layers.get_all_params(network, trainable=True)
+        updates = lasagne.updates.adam(loss, params)
+        self.train = theano.function([input_var, target_var], loss, updates=updates)
+
+        # Test functions
+        test_loss = lasagne.objectives.categorical_crossentropy(prediction, target_var).mean()
+        test_acc = T.mean(T.eq(T.argmax(prediction, axis=1), target_var), dtype=theano.config.floatX)
+        self.test = theano.function([input_var, target_var], [test_loss, test_acc])
+    
+        # Probability and entropy
+        self.probabilities = theano.function([input_var], prediction)
+        entropy = lasagne.objectives.categorical_crossentropy(prediction, prediction)
+        self.entropy_bayesian = theano.function([input_var], entropy)
+    
+        test_prediction_classical = lasagne.layers.get_output(network, deterministic=True)
+        entropy_classical = lasagne.objectives.categorical_crossentropy(test_prediction_classical, test_prediction_classical)
+        self.entropy_deterministic = theano.function([input_var], entropy_classical)
+      
 # Weight initialization helper function
 def weight_init(n_in, n_out, name):
     values = np.asarray(np.random.uniform(
@@ -81,7 +128,8 @@ def weight_init(n_in, n_out, name):
 
 class mlp_variational:
     def __init__(self, input_var, target_var, n_in, n_out, layers, batch_size, n_batches):
-        n_hidden = layers[0]        
+        n_hidden = layers[0]
+        n_in = n_in[0]
         # Input to hidden layer weights
         W1_mu = weight_init(n_in, n_hidden, 'W1_mu') # Weights mean
         W1_log_sigma = weight_init(n_in, n_hidden, 'W1_log_sigma') # Weights log variance
@@ -123,8 +171,8 @@ class mlp_variational:
         # Complete variational loss    
         loss = nll.mean() - (DKL_hidden + DKL_output)/float(n_batches)
         #loss = nll.mean()
-        # SGD training
-        updates = training.RMSprop(loss, params)
+        # ADAM training
+        updates = lasagne.updates.adam(loss, params)
         self.train = theano.function([input_var, target_var], loss, updates=updates)
         
         # Test functions

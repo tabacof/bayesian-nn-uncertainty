@@ -33,9 +33,9 @@ def download(filename, source):
 
 # We then define functions for loading MNIST images and labels.
 # For convenience, they also download the requested files if needed.
-def load_mnist_images(filename):
+def load_mnist_images(filename, source = 'http://yann.lecun.com/exdb/mnist/'):
     if not os.path.exists(filename):
-        download(filename)
+        download(filename,source)
     # Read the inputs in Yann LeCun's binary format.
     with gzip.open(filename, 'rb') as f:
         data = np.frombuffer(f.read(), np.uint8, offset=16)
@@ -48,7 +48,7 @@ def load_mnist_images(filename):
 
 def load_mnist_labels(filename, source = 'http://yann.lecun.com/exdb/mnist/'):
     if not os.path.exists(filename):
-        download(filename)
+        download(filename, source)
     # Read the labels in Yann LeCun's binary format.
     with gzip.open(filename, 'rb') as f:
         data = np.frombuffer(f.read(), np.uint8, offset=8)
@@ -122,11 +122,10 @@ def load_CIFAR10(inside_labels):
     x = np.concatenate(xs)/np.float32(255)
     y = np.concatenate(ys)
     x = np.dstack((x[:, :1024], x[:, 1024:2048], x[:, 2048:]))
-    x = x.reshape((x.shape[0], 32*32*3))
+    x = x.reshape((x.shape[0], 32, 32, 3)).transpose(0,3,1,2)
 
     # subtract per-pixel mean
-    pixel_mean = np.mean(x[0:50000],axis=0)
-    #pickle.dump(pixel_mean, open("cifar10-pixel_mean.pkl","wb"))
+    pixel_mean = np.mean(x[0:50000])
     x -= pixel_mean
 
     # create mirrored images

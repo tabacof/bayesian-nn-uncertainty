@@ -17,8 +17,6 @@ from __future__ import print_function
 import time
 
 import numpy as np
-import theano.tensor as T
-import theano
 
 # Mini batch iterator for training and testing
 def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
@@ -32,30 +30,6 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
         else:
             excerpt = slice(start_idx, start_idx + batchsize)
         yield inputs[excerpt], targets[excerpt]
-
-
-# Stochastic Gradient Descent with Momentum
-def sgd(cost, params, lr=0.05, momentum = 0.9):
-    grads = T.grad(cost=cost, wrt=params)
-    updates = []
-    for p, g in zip(params, grads):
-        acc = theano.shared(p.get_value() * 0.)
-        acc_new =  acc*momentum + (1.0-momentum)*g
-        updates.append([acc, acc_new])
-        updates.append([p, p - acc_new * lr])
-    return updates
-      
-def RMSprop(cost, params, lr=0.001, rho=0.9, epsilon=1e-6):
-    grads = T.grad(cost=cost, wrt=params)
-    updates = []
-    for p, g in zip(params, grads):
-        acc = theano.shared(p.get_value() * 0.)
-        acc_new = rho * acc + (1 - rho) * g ** 2
-        gradient_scaling = T.sqrt(acc_new + epsilon)
-        g = g / gradient_scaling
-        updates.append((acc, acc_new))
-        updates.append((p, p - lr * g))
-    return updates
 
 def train(model, X_train, y_train, X_val, y_val, batch_size, num_epochs, verbose = True):
     if verbose:
@@ -91,7 +65,7 @@ def train(model, X_train, y_train, X_val, y_val, batch_size, num_epochs, verbose
             print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
             print("  validation accuracy:\t\t{:.2f} %".format(
                 val_acc / val_batches * 100))
-                
+
 def test(model, X_test, y_test, batch_size):
     # After training, we compute and print the test error:
     test_err = 0
@@ -106,3 +80,5 @@ def test(model, X_test, y_test, batch_size):
     print("Final results:")
     print("  test loss:\t\t\t{:.6f}".format(test_err / test_batches))
     print("  test accuracy:\t\t{:.2f} %".format(test_acc / test_batches * 100))
+    
+    return test_acc / test_batches
