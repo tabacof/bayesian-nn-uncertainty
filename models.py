@@ -53,17 +53,19 @@ class mlp_dropout:
         self.train = theano.function([input_var, target_var], loss, updates=updates)
 
         # Test functions
-        test_loss = lasagne.objectives.categorical_crossentropy(prediction, target_var).mean()
-        test_acc = T.mean(T.eq(T.argmax(prediction, axis=1), target_var), dtype=theano.config.floatX)
+        test_prediction = lasagne.layers.get_output(network, deterministic=True)
+        test_loss = lasagne.objectives.categorical_crossentropy(test_prediction, target_var).mean()
+        test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var), dtype=theano.config.floatX)
         self.test = theano.function([input_var, target_var], [test_loss, test_acc])
-    
+        bayesian_test_acc = T.mean(T.eq(T.argmax(prediction, axis=1), target_var), dtype=theano.config.floatX)
+        self.bayesian_test = theano.function([input_var, target_var], bayesian_test_acc)
+        
         # Probability and entropy
         self.probabilities = theano.function([input_var], prediction)
         entropy = lasagne.objectives.categorical_crossentropy(prediction, prediction)
         self.entropy_bayesian = theano.function([input_var], entropy)
     
-        test_prediction_classical = lasagne.layers.get_output(network, deterministic=True)
-        entropy_classical = lasagne.objectives.categorical_crossentropy(test_prediction_classical, test_prediction_classical)
+        entropy_classical = lasagne.objectives.categorical_crossentropy(test_prediction, test_prediction)
         self.entropy_deterministic = theano.function([input_var], entropy_classical)
              
 class convnet_dropout:
@@ -102,17 +104,19 @@ class convnet_dropout:
         self.train = theano.function([input_var, target_var], loss, updates=updates)
 
         # Test functions
-        test_loss = lasagne.objectives.categorical_crossentropy(prediction, target_var).mean()
-        test_acc = T.mean(T.eq(T.argmax(prediction, axis=1), target_var), dtype=theano.config.floatX)
+        test_prediction = lasagne.layers.get_output(network, deterministic=True)
+        test_loss = lasagne.objectives.categorical_crossentropy(test_prediction, target_var).mean()
+        test_acc = T.mean(T.eq(T.argmax(test_prediction, axis=1), target_var), dtype=theano.config.floatX)
         self.test = theano.function([input_var, target_var], [test_loss, test_acc])
-    
+        bayesian_test_acc = T.mean(T.eq(T.argmax(prediction, axis=1), target_var), dtype=theano.config.floatX)
+        self.bayesian_test = theano.function([input_var, target_var], bayesian_test_acc)
+          
         # Probability and entropy
         self.probabilities = theano.function([input_var], prediction)
         entropy = lasagne.objectives.categorical_crossentropy(prediction, prediction)
         self.entropy_bayesian = theano.function([input_var], entropy)
     
-        test_prediction_classical = lasagne.layers.get_output(network, deterministic=True)
-        entropy_classical = lasagne.objectives.categorical_crossentropy(test_prediction_classical, test_prediction_classical)
+        entropy_classical = lasagne.objectives.categorical_crossentropy(test_prediction, test_prediction)
         self.entropy_deterministic = theano.function([input_var], entropy_classical)
       
 # Weight initialization helper function

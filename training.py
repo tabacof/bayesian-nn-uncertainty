@@ -66,13 +66,23 @@ def train(model, X_train, y_train, X_val, y_val, batch_size, num_epochs, verbose
             print("  validation accuracy:\t\t{:.2f} %".format(
                 val_acc / val_batches * 100))
 
-def test(model, X_test, y_test, batch_size):
+def test(model, X_test, y_test, batch_size, bayes_repeat = 32):
     # After training, we compute and print the test error:
     test_err = 0
+    test_bayes_acc = 0
     test_acc = 0
     test_batches = 0
     for batch in iterate_minibatches(X_test, y_test, batch_size, shuffle=False):
         inputs, targets = batch
+        
+        # Bayesian accuracy (multiple dropout samples)
+        bayes_acc = 0.0
+        for i, t in zip(inputs, targets):
+            bayes_acc += model.bayesian_test(np.repeat(i[np.newaxis], bayes_repeat, 0), np.repeat(t[np.newaxis], bayes_repeat, 0))
+        bayes_acc /= batch_size
+        test_bayes_acc += bayes_acc
+        
+        # Standard accuracy (no dropout)
         err, acc = model.test(inputs, targets)
         test_err += err
         test_acc += acc
@@ -80,5 +90,6 @@ def test(model, X_test, y_test, batch_size):
     print("Final results:")
     print("  test loss:\t\t\t{:.6f}".format(test_err / test_batches))
     print("  test accuracy:\t\t{:.2f} %".format(test_acc / test_batches * 100))
-    
-    return test_acc / test_batches
+    print("  bayes accuracy:\t\t{:.2f} %".format(test_bayes_acc / test_batches * 100))
+
+    return test_acc / test_batches, test_bayes_acc / test_batches

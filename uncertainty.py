@@ -41,8 +41,10 @@ def anomaly(experiment_name,
     dataset = "mnist" or "cifar"
     For MNIST we use a fully-connected MLP.
     For CIFAR10 we use a convolutional net (similar to LeNet)
+    
     bayesian_approximation = "dropout" for Yarin Gal's method - work either with MNIST 
     bayesian_approximation = "variational" for fully-factorized Gaussian variational approximation - only work with MNIST.
+    
     inside_labels are the subset of trained classes, the other classes are only used for testing.             
     """
 
@@ -74,8 +76,10 @@ def anomaly(experiment_name,
     # Mini-batch training with ADAM
     training.train(model, X_train, y_train, X_val, y_val, batch_size, num_epochs)
     # Mini-batch testing
-    df.set_value(experiment_name, "test_acc", training.test(model, X_test, y_test, batch_size))
-    
+    acc, bayes_acc = training.test(model, X_test, y_test, batch_size)
+    df.set_value(experiment_name, "test_acc", acc)
+    df.set_value(experiment_name, "bayes_test_acc", bayes_acc)
+
     # Uncertainty prediction
     test_pred_mean = {x:[] for x in range(10)}
     test_pred_std = {x:[] for x in range(10)}
@@ -125,11 +129,15 @@ def anomaly(experiment_name,
             
         print("{}\tscore\tthreshold\tTP\tTN".format(name))
         sorted_acc = sorted(acc.items(), key= lambda x : x[1][0], reverse = True)
-        df.set_value(experiment_name, name + ' bal_acc', sorted_acc[0][1][0])        
-        print("\tbalanced acc\t{:.3f}\t{:.3f}\t\t{:.3f}\t{:.3f}".format(sorted_acc[0][1][0], sorted_acc[0][0], sorted_acc[0][1][2], sorted_acc[0][1][3]))
+        df.set_value(experiment_name, name + ' bal_acc', sorted_acc[0][1][0])   
+        df.set_value(experiment_name, name + ' bal_acc_threshold', sorted_acc[0][0])        
+
+        print("\tbalanced acc\t{:.3f}\t{:.6f}\t\t{:.3f}\t{:.3f}".format(sorted_acc[0][1][0], sorted_acc[0][0], sorted_acc[0][1][2], sorted_acc[0][1][3]))
         sorted_acc = sorted(acc.items(), key= lambda x : x[1][1], reverse = True)
-        df.set_value(experiment_name, name +' f1_score', sorted_acc[0][1][1])                
-        print("\tf1 score\t{:.3f}\t{:.3f}\t\t{:.3f}\t{:.3f}".format(sorted_acc[0][1][1], sorted_acc[0][0], sorted_acc[0][1][2], sorted_acc[0][1][3]))
+        df.set_value(experiment_name, name + ' f1_score', sorted_acc[0][1][1])                
+        df.set_value(experiment_name, name + ' f1_score_threshold', sorted_acc[0][0])        
+
+        print("\tf1 score\t{:.3f}\t{:.6f}\t\t{:.3f}\t{:.3f}".format(sorted_acc[0][1][1], sorted_acc[0][0], sorted_acc[0][1][2], sorted_acc[0][1][3]))
         return df
         
     df.set_value(experiment_name, 'dataset', dataset)    
@@ -141,3 +149,4 @@ def anomaly(experiment_name,
     df = anomaly_detection(test_pred_std, "Bayesian prediction STD", df)
 
     return df
+    

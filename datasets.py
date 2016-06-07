@@ -21,6 +21,8 @@ import numpy as np
 import gzip
 import tarfile
 
+import matplotlib.pyplot as plt
+
 # We first define a download function, supporting both Python 2 and 3.
 if sys.version_info[0] == 2:
     from urllib import urlretrieve
@@ -122,6 +124,7 @@ def load_CIFAR10(inside_labels):
     x = np.concatenate(xs)/np.float32(255)
     y = np.concatenate(ys)
     x = np.dstack((x[:, :1024], x[:, 1024:2048], x[:, 2048:]))
+    plt.imshow(x[0].reshape(32,32,3))
     x = x.reshape((x.shape[0], 32, 32, 3)).transpose(0,3,1,2)
 
     # subtract per-pixel mean
