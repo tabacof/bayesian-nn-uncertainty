@@ -58,7 +58,7 @@ def anomaly(experiment_name,
         input_var = T.matrix('inputs')
         target_var = T.ivector('targets')
         n_in = [28*28]
-        X_train, y_train, X_val, y_val, X_test, y_test, X_test_all, y_test_all = datasets.load_MNIST(inside_labels)
+        X_train, y_train, X_test, y_test, X_test_all, y_test_all = datasets.load_MNIST(inside_labels)
         if bayesian_approximation == "dropout":
             model = models.mlp_dropout(input_var, target_var, n_in, n_out, fc_layers, dropout_p, weight_decay)
         elif bayesian_approximation == "variational":
@@ -68,13 +68,13 @@ def anomaly(experiment_name,
         target_var = T.ivector('targets')
     
         n_in = [3, 32, 32]
-        X_train, y_train, X_val, y_val, X_test, y_test, X_test_all, y_test_all = datasets.load_CIFAR10(inside_labels)
+        X_train, y_train, X_test, y_test, X_test_all, y_test_all = datasets.load_CIFAR10(inside_labels)
         model = models.convnet_dropout(input_var, target_var, n_in, n_out, dropout_p, weight_decay)
     
     df = pd.DataFrame()
 
     # Mini-batch training with ADAM
-    training.train(model, X_train, y_train, X_val, y_val, batch_size, num_epochs)
+    training.train(model, X_train, y_train, X_test, y_test, batch_size, num_epochs)
     # Mini-batch testing
     acc, bayes_acc = training.test(model, X_test, y_test, batch_size)
     df.set_value(experiment_name, "test_acc", acc)
