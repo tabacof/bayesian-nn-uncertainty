@@ -165,11 +165,11 @@ def plot(name, img):
 
 def adv(i, C_value):
     img = X_test[i][np.newaxis]
-    print "True class", y_test[i]
+    print "True class:\t", y_test[i]
     
     input_img = T.tensor4()
 
-    plot("orig_img_"+str(i),img)
+    #plot("orig_img_"+str(i),img)
     l_noise.b.set_value(np.random.uniform(-1e-8, 1e-8, size=(3,32,32)).astype(np.float32))
     
     pred = np.array(lasagne.layers.get_output(network, img, deterministic=True).eval())
@@ -181,7 +181,7 @@ def adv(i, C_value):
         adv_class = np.random.randint(0, 10)
     
     target[0,adv_class] = 1.0
-    print "Before ADV top1:", top1
+    print "Before ADV top1:\t", top1
 
     bayesian_prob = lasagne.layers.get_output(network, input_img, deterministic=False)
     bayesian_function = theano.function([input_img], [bayesian_prob])
@@ -189,9 +189,9 @@ def adv(i, C_value):
     bayesian_pred = np.zeros(pred.shape)
     for _ in range(25):
         bayesian_pred[0, np.argmax(bayesian_function(img))] += 1
-    print "Before ADV Bayesian top1:", np.argmax(bayesian_pred)
+    print "Before ADV Bayesian top1:\t", np.argmax(bayesian_pred)
     
-    print "Adversarial class", adv_class
+    print "Adversarial class:\t", adv_class
     
     prob = lasagne.layers.get_output(network, input_img, deterministic=False)
     C = T.scalar()
@@ -201,7 +201,7 @@ def adv(i, C_value):
     adv_function = theano.function([input_img, C], [adv_loss, adv_grad, prob])
     
     # Optimization function for L-BFGS-B
-    def fmin_func(x, T = 128):
+    def fmin_func(x, T = 25):
         l_noise.b.set_value(x.reshape(3, 32, 32).astype(np.float32))
         f, g, _ = adv_function(np.repeat(img, T, 0), C_value)
         return float(f), g.flatten().astype(np.float64)
@@ -210,21 +210,24 @@ def adv(i, C_value):
     #bounds = zip(-(mean_cifar-img).flatten(), ((255.0-mean_cifar)-img).flatten())
     
     # L-BFGS-B optimization to find adversarial noise
-    x, f, d = scipy.optimize.fmin_l_bfgs_b(fmin_func, l_noise.b.get_value().flatten(), bounds = None, maxfun = 50, fprime = None, factr = 1e10, m = 15)
+    x, f, d = scipy.optimize.fmin_l_bfgs_b(fmin_func, l_noise.b.get_value().flatten(), bounds = None, fprime = None, factr = 1e10, m = 15)
     l_noise.b.set_value(x.reshape(3, 32, 32).astype(np.float32))
     
     _, _, pred = adv_function(img, 0.0)
     top1 = np.argmax(pred)
-    print "After ADV top1:", top1
-    plot("adv_img_"+str(i), img + l_noise.b.get_value())
+    print "After ADV top1:\t", top1
+    #plot("adv_img_"+str(i), img + l_noise.b.get_value())
     
     bayesian_pred = np.zeros(pred.shape)
     for _ in range(25):
         bayesian_pred[0, np.argmax(bayesian_function(img))] += 1
-    print "After ADV Bayesian top1:", np.argmax(bayesian_pred)
+    print "After ADV Bayesian top1:\t", np.argmax(bayesian_pred)
+    print
+    print
 
 
 adv(1, 1.0)
+adv(500, 1.0)
 adv(1500, 1.0)
 adv(2500, 1.0)
 adv(3500, 1.0)

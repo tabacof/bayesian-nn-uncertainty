@@ -23,12 +23,15 @@ import training
 
 import pandas as pd
 
+from sklearn import linear_model, metrics, utils
+
 def anomaly(experiment_name,
             dataset = "mnist",
             bayesian_approximation  = "dropout",
             inside_labels = [0, 1],
             num_epochs = 50,
             batch_size = 128,
+            acc_threshold = 0.98,
             weight_decay = 1e-5,
             dropout_p = 0.5,
             fc_layers = [512, 512],
@@ -74,15 +77,14 @@ def anomaly(experiment_name,
     df = pd.DataFrame()
 
     # Mini-batch training with ADAM
-    training.train(model, X_train, y_train, X_test, y_test, batch_size, num_epochs)
+    training.train(model, X_train, y_train, X_test, y_test, batch_size, num_epochs, acc_threshold)
     # Mini-batch testing
     acc, bayes_acc = training.test(model, X_test, y_test, batch_size)
     df.set_value(experiment_name, "test_acc", acc)
     df.set_value(experiment_name, "bayes_test_acc", bayes_acc)
 
     # Uncertainty prediction
-    test_pred_mean = {x:[] for x in range(10)}
-    test_pred_std = {x:[] for x in range(10)}
+    test_pred_mean_std = {x:[] for x in range(10)}
     test_entropy_bayesian = {x:[] for x in range(10)}
     test_entropy_deterministic = {x:[] for x in range(10)}
     
@@ -92,25 +94,23 @@ def anomaly(experiment_name,
         classical_entropy = model.entropy_deterministic(X_test_all[i][np.newaxis,:])
         predictive_mean = np.mean(probs, axis=0)
         predictive_std = np.std(probs, axis=0)
-        test_pred_mean[y_test_all[i]].append(predictive_mean[1])
-        test_pred_std[y_test_all[i]].append(predictive_std.mean())
-        test_entropy_bayesian[y_test_all[i]].append(bayesian_entropy.mean())
-        test_entropy_deterministic[y_test_all[i]].append(classical_entropy.mean())
+        test_pred_mean_std[y_test_all[i]].append(np.concatenate((predictive_mean, predictive_std)))
+        test_entropy_bayesian[y_test_all[i]].append(bayesian_entropy)
+        test_entropy_deterministic[y_test_all[i]].append(classical_entropy)
     
     # Plotting
     if plot:
-        for k in sorted(test_pred_mean.keys()):
+        for k in sorted(test_pred_mean_std.keys()):
             sns.plt.figure()
             #sns.plt.hist(test_pred_mean[k], label = "Prediction mean for " + str(k))
             sns.plt.hist(test_entropy_bayesian[k], label = "Bayesian Entropy v1 for " + str(k))
-            sns.plt.hist(test_pred_std[k], label = "Prediction std for " + str(k))
+            #sns.plt.hist(test_pred_std[k], label = "Prediction std for " + str(k))
             #sns.plt.hist(test_entropy_deterministic[k], label = "Classical entropy for " + str(k))
             sns.plt.legend()
             sns.plt.show()
     
-    # Anomaly detection
-    # by classical prediction entropy
-    def anomaly_detection(anomaly_score_dict, name, df):
+    # Anomaly detection using simple threshold
+    def anomaly_detection_old(anomaly_score_dict, name, df):
         threshold = np.logspace(-30, 1.0, 1000)
         acc = {}
         for t in threshold:
@@ -139,14 +139,55 @@ def anomaly(experiment_name,
 
         print("\tf1 score\t{:.3f}\t{:.6f}\t\t{:.3f}\t{:.3f}".format(sorted_acc[0][1][1], sorted_acc[0][0], sorted_acc[0][1][2], sorted_acc[0][1][3]))
         return df
+    
+    # Anomaly detection using logistic regression    
+    def anomaly_detection(anomaly_score_dict, name, df):
+        X = []
+        y = []
+        for l in anomaly_score_dict:
+            X += anomaly_score_dict[l]
+            if l in inside_labels:
+                y += [0]*len(anomaly_score_dict[l])
+            else:
+                y += [1]*len(anomaly_score_dict[l])
+                
+        X = np.array(X)
+        y = np.array(y)
+        X, y = utils.shuffle(X, y, random_state=0)
+        X_train = X[:len(X)/2]
+        X_test = X[len(X)/2:]
+        y_train = y[:len(y)/2]
+        y_test = y[len(y)/2:]
+
+        clf = linear_model.LogisticRegression(C=1.0)
+        clf.fit(X_train, y_train)
+        auc = metrics.roc_auc_score(np.array(y_test), clf.predict_proba(np.array(X_test))[:,1])
+        print("AUC", auc)
+        df.set_value(experiment_name, name + ' AUC', auc)                
         
+        #print("ACC", metrics.accuracy_score(np.array(y_test), clf.predict(np.array(X_test))))
+        #print("BAL_ACC", metrics.recall_score(np.array(y_test), clf.predict(np.array(X_test)),average='macro', pos_label=None))
+        #print("0-1", metrics.zero_one_loss(np.array(y_test), clf.predict(np.array(X_test))))
+        if plot:        
+            fpr, tpr, thresholds = metrics.roc_curve(np.array(y_test), clf.predict_proba(np.array(X_test))[:,1], pos_label=1)
+            sns.plt.figure()
+            sns.plt.plot(fpr, tpr, label='ROC curve')
+            sns.plt.plot([0, 1], [0, 1], 'k--')
+            sns.plt.xlim([0.0, 1.0])
+            sns.plt.ylim([0.0, 1.05])
+            sns.plt.xlabel('False Positive Rate')
+            sns.plt.ylabel('True Positive Rate')
+            sns.plt.title('Receiver operating characteristic example')
+            sns.plt.legend(loc="lower right")
+            sns.plt.show()
+
     df.set_value(experiment_name, 'dataset', dataset)    
     df.set_value(experiment_name, 'bayesian_approx', bayesian_approximation)    
     df.set_value(experiment_name, 'inside_labels', str(inside_labels))    
     df.set_value(experiment_name, 'num_epochs', num_epochs)    
     df = anomaly_detection(test_entropy_bayesian, "Bayesian entropy", df)
     df = anomaly_detection(test_entropy_deterministic, "Classical entropy", df)
-    df = anomaly_detection(test_pred_std, "Bayesian prediction STD", df)
+    df = anomaly_detection(test_pred_mean_std, "Bayesian prediction", df)
 
     return df
     

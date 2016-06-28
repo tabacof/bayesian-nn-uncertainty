@@ -31,8 +31,8 @@ class mlp_dropout:
                     network, num_units=l,
                     nonlinearity=lasagne.nonlinearities.elu,
                     W=lasagne.init.GlorotUniform())
-        
-            network = lasagne.layers.DropoutLayer(network, p=dropout_p)
+            if dropout_p > 0:
+                network = lasagne.layers.DropoutLayer(network, p=dropout_p)
         
         network = lasagne.layers.DenseLayer(
                 network, num_units=n_out,

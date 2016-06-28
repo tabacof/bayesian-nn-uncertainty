@@ -31,7 +31,7 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
             excerpt = slice(start_idx, start_idx + batchsize)
         yield inputs[excerpt], targets[excerpt]
 
-def train(model, X_train, y_train, X_val, y_val, batch_size, num_epochs, verbose = True):
+def train(model, X_train, y_train, X_val, y_val, batch_size, num_epochs, acc_threshold, verbose = True):
     if verbose:
         print("Starting training...")
     # We iterate over epochs:
@@ -65,6 +65,9 @@ def train(model, X_train, y_train, X_val, y_val, batch_size, num_epochs, verbose
             print("  validation loss:\t\t{:.6f}".format(val_err / val_batches))
             print("  validation accuracy:\t\t{:.2f} %".format(
                 val_acc / val_batches * 100))
+                
+        if val_acc / val_batches >= acc_threshold:
+            break
 
 def test(model, X_test, y_test, batch_size, bayes_repeat = 32):
     # After training, we compute and print the test error:
