@@ -62,6 +62,7 @@ class mlp_dropout:
         
         # Probability and entropy
         self.probabilities = theano.function([input_var], prediction)
+        self.probabilities_deterministic = theano.function([input_var], test_prediction)
         entropy = lasagne.objectives.categorical_crossentropy(prediction, prediction)
         self.entropy_bayesian = theano.function([input_var], entropy)
     
@@ -113,6 +114,7 @@ class convnet_dropout:
           
         # Probability and entropy
         self.probabilities = theano.function([input_var], prediction)
+        self.probabilities_deterministic = theano.function([input_var], test_prediction)
         entropy = lasagne.objectives.categorical_crossentropy(prediction, prediction)
         self.entropy_bayesian = theano.function([input_var], entropy)
     

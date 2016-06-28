@@ -68,6 +68,8 @@ def train(model, X_train, y_train, X_val, y_val, batch_size, num_epochs, acc_thr
                 
         if val_acc / val_batches >= acc_threshold:
             break
+        
+    return epoch
 
 def test(model, X_test, y_test, batch_size, bayes_repeat = 32):
     # After training, we compute and print the test error:

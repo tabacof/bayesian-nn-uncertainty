@@ -31,7 +31,7 @@ def anomaly(experiment_name,
             inside_labels = [0, 1],
             num_epochs = 50,
             batch_size = 128,
-            acc_threshold = 0.98,
+            acc_threshold = 0.6,
             weight_decay = 1e-5,
             dropout_p = 0.5,
             fc_layers = [512, 512],
@@ -77,30 +77,33 @@ def anomaly(experiment_name,
     df = pd.DataFrame()
 
     # Mini-batch training with ADAM
-    training.train(model, X_train, y_train, X_test, y_test, batch_size, num_epochs, acc_threshold)
+    epochs = training.train(model, X_train, y_train, X_test, y_test, batch_size, num_epochs, acc_threshold)
     # Mini-batch testing
     acc, bayes_acc = training.test(model, X_test, y_test, batch_size)
     df.set_value(experiment_name, "test_acc", acc)
     df.set_value(experiment_name, "bayes_test_acc", bayes_acc)
 
     # Uncertainty prediction
-    test_pred_mean_std = {x:[] for x in range(10)}
+    test_mean_std_bayesian = {x:[] for x in range(10)}
+    test_mean_std_deterministic = {x:[] for x in range(10)}
     test_entropy_bayesian = {x:[] for x in range(10)}
     test_entropy_deterministic = {x:[] for x in range(10)}
     
     for i in range(len(X_test_all)):
-        probs = model.probabilities(np.tile(X_test_all[i], batch_size).reshape([-1] + n_in))
+        bayesian_probs = model.probabilities(np.tile(X_test_all[i], batch_size).reshape([-1] + n_in))
         bayesian_entropy = model.entropy_bayesian(np.tile(X_test_all[i], batch_size).reshape([-1] + n_in))
+        classical_probs = model.probabilities_deterministic(X_test_all[i][np.newaxis,:])[0]        
         classical_entropy = model.entropy_deterministic(X_test_all[i][np.newaxis,:])
-        predictive_mean = np.mean(probs, axis=0)
-        predictive_std = np.std(probs, axis=0)
-        test_pred_mean_std[y_test_all[i]].append(np.concatenate((predictive_mean, predictive_std)))
+        predictive_mean = np.mean(bayesian_probs, axis=0)
+        predictive_std = np.std(bayesian_probs, axis=0)
+        test_mean_std_bayesian[y_test_all[i]].append(np.concatenate((predictive_mean, predictive_std)))
         test_entropy_bayesian[y_test_all[i]].append(bayesian_entropy)
         test_entropy_deterministic[y_test_all[i]].append(classical_entropy)
+        test_mean_std_deterministic[y_test_all[i]].append(classical_probs)
     
     # Plotting
     if plot:
-        for k in sorted(test_pred_mean_std.keys()):
+        for k in sorted(test_mean_std_bayesian.keys()):
             sns.plt.figure()
             #sns.plt.hist(test_pred_mean[k], label = "Prediction mean for " + str(k))
             sns.plt.hist(test_entropy_bayesian[k], label = "Bayesian Entropy v1 for " + str(k))
@@ -164,11 +167,8 @@ def anomaly(experiment_name,
         auc = metrics.roc_auc_score(np.array(y_test), clf.predict_proba(np.array(X_test))[:,1])
         print("AUC", auc)
         df.set_value(experiment_name, name + ' AUC', auc)                
-        
-        #print("ACC", metrics.accuracy_score(np.array(y_test), clf.predict(np.array(X_test))))
-        #print("BAL_ACC", metrics.recall_score(np.array(y_test), clf.predict(np.array(X_test)),average='macro', pos_label=None))
-        #print("0-1", metrics.zero_one_loss(np.array(y_test), clf.predict(np.array(X_test))))
-        if plot:        
+
+        if plot: # Plot ROC curve
             fpr, tpr, thresholds = metrics.roc_curve(np.array(y_test), clf.predict_proba(np.array(X_test))[:,1], pos_label=1)
             sns.plt.figure()
             sns.plt.plot(fpr, tpr, label='ROC curve')
@@ -180,14 +180,19 @@ def anomaly(experiment_name,
             sns.plt.title('Receiver operating characteristic example')
             sns.plt.legend(loc="lower right")
             sns.plt.show()
-
+        return df
+        
     df.set_value(experiment_name, 'dataset', dataset)    
     df.set_value(experiment_name, 'bayesian_approx', bayesian_approximation)    
     df.set_value(experiment_name, 'inside_labels', str(inside_labels))    
-    df.set_value(experiment_name, 'num_epochs', num_epochs)    
-    df = anomaly_detection(test_entropy_bayesian, "Bayesian entropy", df)
+    df.set_value(experiment_name, 'epochs', epochs)    
     df = anomaly_detection(test_entropy_deterministic, "Classical entropy", df)
-    df = anomaly_detection(test_pred_mean_std, "Bayesian prediction", df)
+    df = anomaly_detection(test_mean_std_deterministic, "Classical prediction", df)
+    df = anomaly_detection(test_entropy_bayesian, "Bayesian entropy", df)
+    df = anomaly_detection(test_mean_std_bayesian, "Bayesian prediction", df)
 
     return df
+
+df = pd.DataFrame()
     
+df = df.append(anomaly("test_mnist_2labels_1", "mnist", num_epochs = 100, inside_labels=[0,1], plot = False))
